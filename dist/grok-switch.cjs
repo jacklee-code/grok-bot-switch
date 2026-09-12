@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// grok-switch 0.8.4 - https://github.com/enderzcx/grok-bot-switch
+// grok-switch 0.8.5 - https://github.com/enderzcx/grok-bot-switch
 // Single-file build. Do not edit; regenerate with `node build.mjs`.
 "use strict";
 // GROK_SWITCH_PAYLOAD_BEGIN
@@ -739,6 +739,15 @@ var SEND_MESSAGE_TYPE_SCOPED_FIELDS = {
 // dropping fields that do not belong to the declared type is equivalent and
 // stops the loop. Empty optional values are removed as well.
 function normalizeToolArguments(name, args) {
+  // The host routes these tools by property presence, even for null/empty IDs.
+  // Fail closed: never silently change the requested execution machine.
+  if (/^(?:Shell|Read|AwaitShell)$/i.test(name) && args != null && typeof args === "object" &&
+      Object.prototype.hasOwnProperty.call(args, "machineId") &&
+      (typeof args.machineId !== "string" || args.machineId.trim().length === 0)) {
+    throw contract.protocolError("Invalid machineId: omit the field for the cloud computer, or use a registered machine ID for a user computer. This call was not dispatched.", {
+      code: "invalid-machine-target"
+    });
+  }
   if (!isSendMessageTool(name) || args == null || typeof args !== "object" || Array.isArray(args)) return args;
   var declaredType = typeof args.type === "string" ? args.type : null;
   var out = {};
@@ -758,14 +767,16 @@ function parseToolArgumentsObject(raw, protocolId, toolName) {
   if (text.trim().length === 0) {
     return {};
   }
+  var parsed;
   try {
-    return normalizeToolArguments(toolName, JSON.parse(text));
+    parsed = JSON.parse(text);
   } catch (_error) {
     throw contract.protocolError("Tool call has invalid final JSON arguments", {
       protocol: protocolId,
       code: "invalid-json"
     });
   }
+  return normalizeToolArguments(toolName, parsed);
 }
 
 function toolParameters(parameters, protocolId) {
@@ -824,6 +835,7 @@ function convertFunctionTool(tool, protocolId) {
   var description = fn.description || tool.description;
   var parameters = toolParameters(fn.parameters || tool.parameters || fn.inputSchema || tool.inputSchema, protocolId);
   var converted = { name: name, parameters: parameters };
+  if (typeof fn.strict === "boolean") converted.strict = fn.strict;
   if (typeof description === "string") {
     converted.description = description;
   }
@@ -1234,6 +1246,7 @@ function toOpenAiTools(rawTools) {
     if (typeof fns[i].description === "string") {
       item.function.description = fns[i].description;
     }
+    if (typeof fns[i].strict === "boolean") item.function.strict = fns[i].strict;
     out.push(item);
   }
   return out;
@@ -1836,7 +1849,9 @@ function toResponsesTools(rawTools) {
     var item = {
       type: "function",
       name: fns[i].name,
-      parameters: fns[i].parameters
+      parameters: fns[i].parameters,
+      // Host optional fields must remain optional (notably machineId).
+      strict: fns[i].strict == null ? false : fns[i].strict
     };
     if (typeof fns[i].description === "string") {
       item.description = fns[i].description;
@@ -4903,7 +4918,7 @@ var cliFs = require("node:fs");
 var cliPath = require("node:path");
 var cliChildProcess = require("node:child_process");
 
-var CLI_VERSION = "0.8.4";
+var CLI_VERSION = "0.8.5";
 var CLI_HOST_PATH = process.env.GROK_SWITCH_HOST || "/home/box/sand-host/host-main.cjs";
 var CLI_HOST_VERSION_PATH = cliPath.join(cliPath.dirname(CLI_HOST_PATH), "version");
 var CLI_BACKUP_PATH = CLI_HOST_PATH + ".grok-switch.orig";

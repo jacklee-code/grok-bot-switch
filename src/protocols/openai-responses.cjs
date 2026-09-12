@@ -161,7 +161,9 @@ function toResponsesTools(rawTools) {
     var item = {
       type: "function",
       name: fns[i].name,
-      parameters: fns[i].parameters
+      parameters: fns[i].parameters,
+      // Host optional fields must remain optional (notably machineId).
+      strict: fns[i].strict == null ? false : fns[i].strict
     };
     if (typeof fns[i].description === "string") {
       item.description = fns[i].description;

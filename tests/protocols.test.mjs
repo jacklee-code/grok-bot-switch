@@ -14,9 +14,52 @@ const protocolTools = require("../src/protocols/tools.cjs");
 
 const PROTOCOL_IDS = ["openai-chat", "openai-responses", "anthropic-messages"];
 
+test("Responses keeps host optional fields non-strict unless explicitly requested", () => {
+  const adapter = require("../src/protocols/openai-responses.cjs");
+  const parameters = { type: "object", properties: { command: { type: "string" }, machineId: { type: "string" } }, required: ["command"] };
+  for (const strict of [undefined, false, true]) {
+    for (const nested of [false, true]) {
+      const fn = { name: "Shell", parameters, ...(strict === undefined ? {} : { strict }) };
+      const tool = nested ? { type: "function", function: fn } : fn;
+      const output = adapter.buildRequest({ model: "test", messages: [], tools: [tool] }).body.tools[0];
+      assert.equal(output.strict, strict ?? false);
+      assert.deepEqual(output.parameters, parameters);
+    }
+  }
+});
+
+test("machine-target validation fails closed without rerouting or mutating arguments", () => {
+  for (const protocol of PROTOCOL_IDS) {
+    for (const name of ["Shell", "Read", "AwaitShell"]) {
+      for (const value of [null, "", "  ", 0, false, [], {}]) {
+        const raw = JSON.stringify({ machineId: value });
+        assert.throws(() => protocolTools.parseToolArgumentsObject(raw, protocol, name),
+          error => error.code === "invalid-machine-target" && /not dispatched/.test(error.message));
+      }
+      for (const args of [{ command: "hostname" }, { machineId: "registered-machine-id" }]) {
+        assert.deepEqual(protocolTools.parseToolArgumentsObject(JSON.stringify(args), protocol, name), args);
+      }
+    }
+    assert.deepEqual(protocolTools.parseToolArgumentsObject('{"machineId":null}', protocol, "unrelated"), { machineId: null });
+    assert.throws(() => protocolTools.parseToolArgumentsObject('{bad', protocol, "Shell"), error => error.code === "invalid-json");
+  }
+});
+
 function utf8(text) {
   return new TextEncoder().encode(text);
 }
+
+test("Responses streaming rejects invalid machine targets before completing a tool call", () => {
+  const adapter = require("../src/protocols/openai-responses.cjs");
+  const decoder = adapter.createStreamDecoder();
+  const item = { id: "fc_target", type: "function_call", call_id: "call_target", name: "Shell", arguments: "" };
+  const frame = data => utf8(`data: ${JSON.stringify(data)}\n\n`);
+  const events = decoder.push(frame({ type: "response.output_item.added", output_index: 0, item }));
+  events.push(...decoder.push(frame({ type: "response.function_call_arguments.delta", output_index: 0, delta: '{"command":"hostname","machineId":null}' })));
+  assert.equal(events.some(event => event.type === "tool-call"), false);
+  assert.throws(() => decoder.push(frame({ type: "response.function_call_arguments.done", output_index: 0,
+    arguments: '{"command":"hostname","machineId":null}' })), error => error.code === "invalid-machine-target");
+});
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
