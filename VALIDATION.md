@@ -91,8 +91,12 @@ earlier observations or extend them to unrelated Bots and computers.
   for the tested exchange, not independence from all client state.
 - The original nine Temporal Bots retained their official routes. No existing
   Bot, history, server identity or schedule was migrated. The original-client
-  checks cover the control command and ordinary text; the earlier Shell-tool
-  verification still belongs to the patched-desktop test.
+  checks cover the control command and ordinary text. A further stock-client
+  test executed `printf GS-STOCK-SHELL-OK-5746` through the native cloud Shell:
+  target `box`, exit `0`, 96 ms, with native policy `auto_review` allowed. The
+  new response marker was visible in the desktop screenshot. This establishes
+  that specific Shell round trip; the earlier Shell test remains separate
+  patched-desktop evidence, and other tools or approval outcomes are untested.
 
 The detailed routing analysis, request evidence, cached feature-gate values,
 and second-computer acceptance steps are in
@@ -113,7 +117,7 @@ a verified alpha.1 staging snapshot. It includes installation/profile discovery,
 strict Scope parsing, one elevation attempt when needed, preservation of the
 original profile, and managed backup verification.
 
-The Windows development run passed **39 tests** in
+The Windows development run passed **44 tests** in
 `desktop-patcher/tests`, including transaction/restore refusal cases and
 entry-point checks for elevation retry, restart intent, and profile selection.
 A hidden Tk construction check and temporary-directory CLI inspection check
@@ -122,7 +126,7 @@ and fixture checks, not a claim about the final portable executable.
 
 The final Windows portable EXE was built with Python 3.12.6, PyInstaller 6.20.0
 and bundled Node.js 24.15.0. Its SHA-256 is
-`4ffe1d7c79cac3dbe1c678c04817dd6a4b2d91d7a9ba14ea21358a2c4cf0236b`.
+`7ac108b93db4a0fb4d32d04c927baead66772bbc5d7e7afe5577815e9094b666`.
 Four packaged CLI checks completed successfully against this exact artifact:
 
 - Inspect the actual stock installation: `original`, version `0.66.0`.
@@ -132,6 +136,15 @@ Four packaged CLI checks completed successfully against this exact artifact:
   profile: `ours` with the exact requested synthetic scope.
 - Restore that fixture: `original`; both original file hashes and the
   previously absent scope were restored exactly.
+
+A fifth packaged check supplied an actual temporary NTFS junction to the CLI
+dry-run entry point. It was refused with `unsafe_path`; target files remained
+unchanged and neither the state directory nor profile scope was created.
+Windows CI had exposed short/long filename identity differences in the first
+candidate. Version 0.1.1 canonicalizes identities while retaining the selected
+mutation paths for reparse checks. Real 8.3 aliases and a short-name temporary
+root were used to reproduce that environment; the source tests include the
+PowerShell identity check and CLI junction refusal.
 
 The real installation's hashes, sizes, timestamps, scope and running process
 IDs remained unchanged throughout those packaged checks. The final GUI was

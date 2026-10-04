@@ -82,10 +82,10 @@ def execute(request: dict, progress=None) -> dict:
 
 
 def prepare_request(request: dict) -> None:
-    """Resolve paths in the original caller's cwd and remember restart intent."""
+    """Anchor paths to the caller's cwd without erasing junction evidence."""
     for key in ("install_dir", "profile_dir", "node_path", "state_root", "snapshot_dir"):
         if request.get(key):
-            request[key] = str(Path(request[key]).resolve())
+            request[key] = str(Path(request[key]).absolute())
     if request["action"] in ("patch", "restore") and not request.get("dry_run") and not request.get("no_restart"):
         expected = path_key(Path(request["install_dir"]) / "Grok Bot.exe")
         request["restart_if_changed"] = any(
@@ -213,7 +213,7 @@ def cli(args: argparse.Namespace) -> int:
             if not install or not profile:
                 raise ValueError("無法唯一識別安裝／使用者設定目錄；請指定 --install-dir 與 --profile-dir。")
             request = {"action": "inspect" if args.inspect else "patch" if args.patch else "restore" if args.restore else "import_snapshot",
-                       "install_dir": str(Path(install).resolve()), "profile_dir": str(Path(profile).resolve()),
+                       "install_dir": str(Path(install).absolute()), "profile_dir": str(Path(profile).absolute()),
                        "node_path": args.node_path or find_node(), "state_root": args.state_root or default_state_root(),
                        "scope": read_scope(args.scope) if args.scope else None, "snapshot_dir": args.import_snapshot,
                        "dry_run": args.dry_run, "no_restart": args.no_restart}
@@ -437,8 +437,8 @@ class Application:
             snapshot_dir = filedialog.askdirectory(title="選擇含 manifest.json 與 original 的舊版完整候選／備份資料夾")
             if not snapshot_dir:
                 return
-        request = {"action": action, "install_dir": str(Path(self.install.get()).resolve()),
-                   "profile_dir": str(Path(self.profile.get()).resolve()), "scope": self.scope,
+        request = {"action": action, "install_dir": str(Path(self.install.get()).absolute()),
+                   "profile_dir": str(Path(self.profile.get()).absolute()), "scope": self.scope,
                    "node_path": self.args.node_path or find_node(), "state_root": self.state_root,
                    "snapshot_dir": snapshot_dir, "dry_run": False}
         self.busy = True

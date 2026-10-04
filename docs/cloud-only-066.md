@@ -24,6 +24,10 @@ A second live check removed only the cached last-roster and last-agent selection
 
 This second check rules out dependence on those two old roster/selection cache entries for the tested exchange. It was **not** a fresh desktop profile, a new account login, a second computer, or an office-machine test. Other ordinary profile data and authentication were preserved.
 
+A subsequent live tool check also used the original desktop UI. The Bot was asked to execute the harmless cloud Shell command `printf GS-STOCK-SHELL-OK-5746`. The native cloud audit recorded turn ID `0370fc18-6597-4a47-b3ab-d60c7066a3a8`, tool `shell_command`, target `box`, exit code `0`, and duration `96 ms`. The native `auto_review` policy recorded `allowed`, and a new desktop screenshot confirmed the resulting response marker `GS-STOCK-SHELL-OK-5746`. The accessibility snapshot was stale for that final reply; the screenshot supplied the visible-result confirmation.
+
+That check establishes this one Shell-tool round trip through the original client and shows that the native review path was retained. It does not validate all tools or every approval outcome. An earlier Shell test from the initial deployment used a patched desktop client and remains separate historical evidence.
+
 The two provider requests are request-level evidence, not a claim that two separate user messages were sent. The publisher checkpoint establishes that the host's publishing path ran; by itself it does not establish whether the desktop displayed the gateway copy or the server-store copy of the response.
 
 ## Why the original client can work
@@ -66,7 +70,7 @@ The original nine Temporal Bots in this deployment remain on their official rout
 
 Current cloud-adapter support is manual plain-text main-chat turns for explicitly allowlisted new local Bots. `/gs status`, `/gs list`, `/gs help`, and `/gs use <saved-provider>` are local commands. `/gs official` does not convert a local identity into a Temporal identity; use an existing official Bot for official Grok.
 
-The adapter retains the native runner and tool-permission mechanisms. The earlier successful Shell-tool test used the patched desktop client; it is **not** evidence of a Shell-tool round trip through the original client. This cloud-only live verification covers the control command and ordinary text conversation, including the roster-cache refresh. Attachments, reply threads, forks, task conversations, groups, voice, connectors, subagents, schedules, and cross-device operation require their own validation and are not established by this test. Some unsupported input forms are deliberately rejected by the adapter.
+The adapter retains the native runner and tool-permission mechanisms. This cloud-only live verification covers the control command, ordinary text conversation including the roster-cache refresh, and the specific harmless Shell-tool round trip described above. Other tools and approval outcomes have not been established by that single Shell check. Attachments, reply threads, forks, task conversations, groups, voice, connectors, subagents, schedules, and cross-device operation require their own validation and are not established by this test. Some unsupported input forms are deliberately rejected by the adapter.
 
 The custom provider performs the local Bot's main inference. This does **not** establish zero official weekly usage, continued operation after official account limits are exhausted, or independence from all platform services. Native safety review, the cloud computer, storage, authentication, telemetry, and other services may still be involved. No weekly-quota before/after measurement was completed as part of this result.
 

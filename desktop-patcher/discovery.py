@@ -8,7 +8,15 @@ import subprocess
 
 
 def path_key(value):
-    return os.path.normcase(os.path.abspath(os.fspath(value))).rstrip("\\/")
+    """Canonical identity only; never use this to rewrite mutation operands.
+
+    Windows can report the same executable through either its long name or an
+    8.3 alias (notably RUNNER~1 / profile TEMP paths). realpath expands existing
+    ancestors even when a fixture or prospective filename does not exist yet.
+    Callers retain their original absolute paths so engine reparse-point checks
+    still inspect and reject any junction in the selected path.
+    """
+    return os.path.normcase(os.path.realpath(os.path.abspath(os.fspath(value)))).rstrip("\\/")
 
 
 def running_processes():
@@ -164,7 +172,7 @@ foreach ($processId in $request.pids) {
 }
 '''
     result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', command],
-                            input=json.dumps({'pids': matched, 'exe': str((Path(install_dir) / 'Grok Bot.exe').absolute())}),
+                            input=json.dumps({'pids': matched, 'exe': os.path.realpath(Path(install_dir) / 'Grok Bot.exe')}),
                             capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30,
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     if result.returncode:
