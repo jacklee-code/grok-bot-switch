@@ -66,7 +66,8 @@ const panel = "var UI_HTML = " + JSON.stringify(panelHtml) + ";\n";
 const cli = read("src/ui.cjs") + panel + read("src/cli.cjs").replace("__GROK_SWITCH_VERSION__", version);
 
 const output = `#!/usr/bin/env node
-// grok-switch ${version} - https://github.com/enderzcx/grok-bot-switch
+// grok-switch ${version} - https://github.com/jacklee-code/grok-bot-switch
+// Fork of https://github.com/enderzcx/grok-bot-switch (MIT).
 // Single-file build. Do not edit; regenerate with \`node build.mjs\`.
 "use strict";
 ${payload}${cli}`;

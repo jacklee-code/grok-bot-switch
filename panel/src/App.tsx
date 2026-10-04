@@ -2,7 +2,7 @@
 // Header, provider list and full-screen form keep the upstream layout; the
 // data layer talks to the grok-switch panel API instead of Tauri.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, MessageSquareText, Moon, Plus, RefreshCw, Sparkles, Sun, Wrench } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, MessageSquareText, Moon, Plus, RefreshCw, Sparkles, Sun, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -110,7 +110,7 @@ export default function App() {
     toast(`正在向 ${name} 发测试请求…`);
     try {
       const { probe } = await api.test(name);
-      toast(probe.ok ? `${name} 正常：${probe.ms}ms，回复 ${JSON.stringify(probe.text)}` : `${name} 失败：${probe.error}`, probe.ok ? "ok" : "bad");
+      toast(probe.ok ? `${name} 接口测试通过：${probe.ms}ms，回复 ${JSON.stringify(probe.text)}。这不代表聊天已接入。` : `${name} 接口测试失败：${probe.error}`, probe.ok ? "info" : "bad");
       void refresh();
     } catch (e) {
       toast(message(e), "bad");
@@ -131,8 +131,8 @@ export default function App() {
     setState(next);
     if (probe && !probe.ok) return;
     setForm(null);
-    toast(probe ? `${name} 测试通过（${probe.ms}ms）` : `${name} 已保存`, "ok");
-    if (useNow) void run("use:" + name, () => api.use(name));
+    toast(probe ? `${name} 接口测试通过（${probe.ms}ms）；聊天接入仍需验证。` : `${name} 已保存`, probe ? "info" : "ok");
+    if (useNow) void run("use:" + name, () => api.use(name), `已保存 ${name} 为路由来源，请查看聊天兼容状态`);
   }
 
   if (loadError && !state) {
@@ -152,6 +152,16 @@ export default function App() {
   const names = Object.keys(state.providers);
   const activeProvider = state.active ? state.providers[state.active] : null;
   const restartPending = host.runningCurrentBundle === false || host.supervisor.pending != null;
+  const compatibility = host.executionCompatibility;
+  const chatBlocked = compatibility?.status === "blocked";
+  const scopedAdapter = compatibility?.reason === "scoped-local-adapter";
+  const compatibilityLabel = scopedAdapter ? "独立测试 Bot 待验证" : chatBlocked ? "聊天路径未接入" : "聊天接入未验证";
+  const compatibilityMessage = scopedAdapter
+    ? "已配置独立测试 Bot 的本机路由；既有 Temporal 聊天不受影响，仍需实际聊天验证。"
+    : compatibility?.message || "未取得聊天路由的兼容检测结果。补丁、进程或接口测试正常，都不能证明当前聊天已接入外部模型。";
+  const recentTests = state.recent.filter((entry) => entry.kind === "test").length;
+  const recentChat = state.recent.filter((entry) => entry.kind === "turn" || entry.kind === "main").length;
+  const recentOther = state.recent.length - recentTests - recentChat;
   const codex = state.codex;
   const login = codex.jobs["codex-login"];
   const install = codex.jobs["codex-install"];
@@ -189,20 +199,34 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         <section className="rounded-xl border border-border bg-card p-4 shadow-sm flex flex-wrap items-center gap-4">
           <div className="flex-1 min-w-[220px]">
-            <p className="text-xs text-muted-foreground">当前对话使用</p>
+            <p className="text-xs text-muted-foreground">已保存的路由配置</p>
             <div className="flex flex-wrap items-center gap-2 mt-1">
               <span className="text-lg font-semibold">{state.route === "official" ? "官方 Grok" : state.route === "external" ? state.active : "配置有误"}</span>
               {state.route === "external" && activeProvider && <ProviderStatusBadge label={activeProvider.protocol === "anthropic-messages" ? "Anthropic" : activeProvider.protocol === "openai-responses" ? "Responses" : "Chat"} tone="info" />}
-              {restartPending && <ProviderStatusBadge label="等待主程序重启" tone="warning" title="补丁刚更新，Grok 的 supervisor 会在没有 Bot 忙碌时重启主程序，之后新对话生效。" />}
+              <ProviderStatusBadge label={compatibilityLabel} tone="warning" />
+              {restartPending && <ProviderStatusBadge label="等待主程序重启" tone="warning" title="补丁刚更新，Grok 的 supervisor 会在没有 Bot 忙碌时重启主程序。重启不代表当前聊天路径兼容。" />}
             </div>
             <p className="text-xs text-muted-foreground font-mono break-all mt-1">
-              {state.route === "external" && activeProvider ? activeProvider.summary : state.route === "error" ? state.routeError : "选择下面任一来源后，下一条消息生效"}
+              {state.route === "external" && activeProvider ? activeProvider.summary : state.route === "error" ? state.routeError : "未选择外部来源；实际聊天路由仍取决于 Grok Bot 的执行模式"}
             </p>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <Dot ok={host.exists && host.patched} warn={host.exists && !host.patched} label={!host.exists ? "未找到主程序" : host.patched ? "补丁已就位" : "未打补丁"} />
+            <Dot ok={host.exists && host.patched} warn={host.exists && !host.patched} label={!host.exists ? "未找到主程序" : host.patched ? "文件已打补丁" : "未打补丁"} />
             <Dot ok={host.process != null && host.runningCurrentBundle !== false} warn={host.process == null || host.runningCurrentBundle === false} label={host.process ? (host.runningCurrentBundle === false ? "重启待执行" : "主程序运行中") : "主程序未运行"} />
             <Dot ok={!host.supervisor.busy} warn={host.supervisor.busy} label={host.supervisor.busy ? "Bot 忙碌中" : "空闲"} />
+          </div>
+        </section>
+
+        <section role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden="true" />
+            <div className="min-w-0 space-y-2">
+              <h2 className="text-sm font-semibold text-amber-900 dark:text-amber-200">{scopedAdapter ? "独立测试 Bot 已配置，等待聊天验证" : chatBlocked ? "当前聊天需要兼容适配" : "尚未验证真实聊天接入"}</h2>
+              <p className="text-sm text-amber-900 dark:text-amber-100">{compatibilityMessage}</p>
+              <p className="text-xs text-amber-800 dark:text-amber-300">面板测试直接请求所选接口，只验证地址、密钥与模型。聊天命令 /gs 需要消息经过 Switch 的推理入口；未接入时可能被当作普通消息送给模型。</p>
+              {compatibility && compatibility.profiles.total > 0 && <p className="text-xs text-amber-800 dark:text-amber-300">已检测 {compatibility.profiles.total} 个 Bot 配置：Temporal {compatibility.profiles.temporal} 个，Box {compatibility.profiles.box} 个。这是配置检测结果，不是实时聊天验证。</p>}
+              <p className="text-xs text-amber-800 dark:text-amber-300">实验适配器也需要实际聊天验证；仅安装、启用或接口测试成功不会显示为已接入。</p>
+            </div>
           </div>
         </section>
 
@@ -211,7 +235,7 @@ export default function App() {
             <h2 className="text-sm font-medium text-muted-foreground">模型来源</h2>
             <span className="text-xs text-muted-foreground">{names.length ? `${names.length} 个自定义来源` : ""}</span>
           </div>
-          <ProviderCard name="official" provider={null} active={state.route === "official"} busy={busy != null} switching={busy === "official"} onUse={() => void run("official", () => api.official(), "已切回官方 Grok，下一条消息生效")} />
+          <ProviderCard name="official" provider={null} active={state.route === "official"} busy={busy != null} switching={busy === "official"} onUse={() => void run("official", () => api.official(), "已保存为官方 Grok 路由配置")} />
           {names.length === 0 && (
             <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
               还没有自定义模型来源。点右上角"添加"，或在下方用 ChatGPT 登录。
@@ -225,7 +249,7 @@ export default function App() {
               active={state.active === name}
               busy={busy != null}
               switching={busy === "use:" + name}
-              onUse={() => void run("use:" + name, () => api.use(name))}
+              onUse={() => void run("use:" + name, () => api.use(name), `已保存 ${name} 为路由来源，请查看聊天兼容状态`)}
               onEdit={() => setForm({ editing: name })}
               onTest={() => void testProvider(name)}
               onDuplicate={() => void duplicateProvider(name)}
@@ -300,6 +324,7 @@ export default function App() {
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-muted-foreground px-1">用量与记录</h2>
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
+            <p className="text-xs text-muted-foreground">累计用量包含接口测试，不能用请求总数判断聊天是否接入。</p>
             {Object.keys(state.usage).length === 0 ? (
               <p className="text-sm text-muted-foreground">还没有外部请求。</p>
             ) : (
@@ -307,7 +332,7 @@ export default function App() {
                 <thead>
                   <tr className="text-xs text-muted-foreground">
                     <th className="text-left font-medium pb-2">来源</th>
-                    <th className="text-right font-medium pb-2">请求</th>
+                    <th className="text-right font-medium pb-2">请求（含测试）</th>
                     <th className="text-right font-medium pb-2">失败</th>
                     <th className="text-right font-medium pb-2">输入 token</th>
                     <th className="text-right font-medium pb-2">输出 token</th>
@@ -325,6 +350,13 @@ export default function App() {
                   ))}
                 </tbody>
               </table>
+            )}
+            {state.recent.length > 0 && (
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p>最近 {state.recent.length} 条记录：接口测试 {recentTests} · 对话请求（turn / main）{recentChat} · 其他或未分类 {recentOther}</p>
+                {recentChat === 0 && <p className="text-amber-700 dark:text-amber-400">这批记录中没有对话请求（turn / main），尚不能据此确认聊天已接入。</p>}
+                <p>近期记录只反映所保留的日志；历史对话请求也不代表当前聊天路由已经验证。</p>
+              </div>
             )}
             {state.recent.length > 0 && <pre className="text-xs bg-muted rounded-lg p-3 max-h-56 overflow-auto whitespace-pre-wrap break-all font-mono">{state.recent.map(formatLog).join("\n")}</pre>}
           </div>
@@ -353,7 +385,10 @@ export default function App() {
                 </dd>
                 <dt className="text-muted-foreground">配置文件</dt>
                 <dd className="break-all">{state.configPath}</dd>
+                <dt className="text-muted-foreground">聊天兼容状态</dt>
+                <dd>{compatibilityLabel}{compatibility ? ` · ${compatibility.reason}` : ""}</dd>
               </dl>
+              {compatibility && compatibility.evidence.length > 0 && <pre className="text-xs bg-muted rounded-lg p-3 overflow-auto whitespace-pre-wrap break-all font-mono">{compatibility.evidence.join("\n")}</pre>}
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" disabled={busy != null} onClick={() => void run("restart", () => api.restart())}>
                   请求重启主程序
@@ -389,11 +424,12 @@ export default function App() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>在聊天里切换</DialogTitle>
-            <DialogDescription>这些消息在云端主程序里直接处理，不发给任何模型、不花 token，任何平台都一样。</DialogDescription>
+            <DialogDescription>以下命令只在聊天消息经过 Switch 推理入口时由云端主程序处理。Temporal 路由或已停用的 Box 入口可能绕过补丁，此时命令会作为普通消息发送给模型并可能消耗额度。</DialogDescription>
           </DialogHeader>
           <div className="space-y-2 text-sm">
+            <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">{scopedAdapter ? "独立测试 Bot 的本机路由已配置，但还未验证真实聊天。既有 Temporal 聊天不受影响，也不会因此获得 /gs 命令支持。" : chatBlocked ? "当前聊天路径未接入：这些聊天命令暂不能作为切换方式。" : "聊天接入尚未验证：请先确认真实聊天经过 Switch，再使用以下命令。"} 面板仍可保存来源和直接测试接口。</p>
             <p>
-              <code className="rounded bg-muted px-1.5 py-0.5 font-mono">/gs use 名字</code> 切到某个来源，下一条消息生效
+              <code className="rounded bg-muted px-1.5 py-0.5 font-mono">/gs use 名字</code> 选择后续经 Switch 处理的消息来源
             </p>
             <p>
               <code className="rounded bg-muted px-1.5 py-0.5 font-mono">/gs official</code> 切回官方 Grok

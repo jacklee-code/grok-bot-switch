@@ -55,7 +55,7 @@ export function ProviderCard({
             <div className="flex flex-wrap items-center gap-2 min-h-7">
               <h3 className="text-base font-semibold leading-snug break-words">{official ? "官方 Grok" : name}</h3>
               <ProviderStatusBadge label={official ? "原厂通道" : PROTOCOL_BADGE[provider.protocol] ?? provider.protocol} tone={official ? "muted" : "info"} />
-              {active && <ProviderStatusBadge label="使用中" tone="success" />}
+              {active && <ProviderStatusBadge label="已选择" tone="info" title="这是已保存的路由配置；聊天是否接入请查看上方兼容状态。" />}
               {provider && !provider.valid && <ProviderStatusBadge label="配置无效" tone="warning" title={provider.summary} />}
             </div>
             <p className="endpoint text-xs text-muted-foreground font-mono break-all">{endpoint}</p>

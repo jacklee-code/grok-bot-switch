@@ -17,6 +17,17 @@ export interface Provider {
   valid: boolean;
 }
 
+export interface ExecutionCompatibility {
+  status: "blocked" | "unverified";
+  reason: "box-turn-retired" | "temporal-routing" | "mixed-routing" | "host-missing" | "unknown-host" | "box-route-unverified" | "scoped-local-adapter";
+  boxTurnRetired: boolean;
+  inferenceFactoryPresent: boolean;
+  runtimeVerified: false;
+  profiles: { total: number; temporal: number; box: number };
+  message: string;
+  evidence: string[];
+}
+
 export interface HostState {
   path: string;
   exists: boolean;
@@ -27,6 +38,7 @@ export interface HostState {
   process: { pid: number; startedAtMs: number | null } | null;
   runningCurrentBundle: boolean | null;
   supervisor: { busy: boolean; pending: { id: string } | null };
+  executionCompatibility?: ExecutionCompatibility;
 }
 
 export interface Job {

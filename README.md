@@ -1,5 +1,13 @@
 # Grok Bot Switch
 
+> **此 fork 的新版相容性說明：** Grok Bot 0.66.0／host 1494ebd 的 Temporal 聊天不會經過下述原始 Box 推理補丁。面板測試成功不代表聊天已接入。本 fork 增加路由診斷及針對獨立新 Bot 的實驗性相容工具，詳見 [FORK.md](FORK.md)。下方保留上游使用說明；原始安裝指令並不部署新版桌面／host 相容層。
+
+`0.9.0-alpha.1` 已在上述版本組合完成真實桌面文字往返、零模型請求的 `/gs status`，以及原生雲端 Shell 測試。這個支援範圍只涵蓋明確設定的獨立新 Bot，不會自動遷移既有 Temporal 身份、歷史或排程。
+
+- [驗收結果與限制](VALIDATION.md)
+- [Windows 0.66.0 候選產生、校核及還原工具](experimental/client-066/README.md)
+- [Linux host 1494ebd 相容層與獨立 Bot 設定](experimental/host-066/README.md)
+
 让 Grok Bot 用你自己的模型。一段提示词让 Grok Bot 装好并打开配置面板，你在面板里填供应商（API key 或 ChatGPT 登录），之后在聊天里发 `/gs use 名字` 切换、`/gs official` 切回。支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 三种协议。非 xAI / X 官方项目。
 
 ## 怎么用

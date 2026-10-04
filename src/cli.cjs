@@ -7,7 +7,7 @@ var cliPath = require("node:path");
 var cliChildProcess = require("node:child_process");
 
 var CLI_VERSION = "__GROK_SWITCH_VERSION__";
-var CLI_HOST_PATH = process.env.GROK_SWITCH_HOST || "/home/box/sand-host/host-main.cjs";
+var CLI_HOST_PATH = cliDetectHostPath(process.env, cliFs);
 var CLI_HOST_VERSION_PATH = cliPath.join(cliPath.dirname(CLI_HOST_PATH), "version");
 var CLI_BACKUP_PATH = CLI_HOST_PATH + ".grok-switch.orig";
 var CLI_SUPERVISOR_DIR = process.env.GROK_SWITCH_SUPERVISOR_DIR || "/tmp/sand-supervisor";
@@ -23,6 +23,31 @@ var CLI_PATCH_END = "// GROK_SWITCH_END";
 var CLI_HOST_FACTORY = "function createHostInference(";
 var CLI_RENAMED_FACTORY = "function __grokSwitchOriginalCreateHostInference(";
 var CLI_REQUIRED_HOST_NAMES = ["BasePromptExecutor", "BasePromptBuilder", "function createCursorSandInference("];
+
+// Prefer the bundle of a running host when both old and new layouts exist.
+// An explicit override is authoritative, including when it points at a missing
+// file: silently selecting another installation would patch the wrong host.
+function cliDetectHostPath(env, fs) {
+  if (env.GROK_SWITCH_HOST) return env.GROK_SWITCH_HOST;
+  var candidates = ["/opt/sand/sand-host/host-main.cjs", "/home/box/sand-host/host-main.cjs"];
+  var existing = candidates.filter(function (file) {
+    try { return fs.statSync(file).isFile(); } catch (_error) { return false; }
+  });
+  var procRoot = env.GROK_SWITCH_PROC || "/proc";
+  var entries = [];
+  try { entries = fs.readdirSync(procRoot); } catch (_error) {}
+  var running = new Set();
+  for (var i = 0; i < entries.length; i += 1) {
+    if (!/^\d+$/.test(entries[i])) continue;
+    try {
+      var args = fs.readFileSync(cliPath.join(procRoot, entries[i], "cmdline"), "utf8").split("\0");
+      for (var j = 0; j < existing.length; j += 1) {
+        if (args.indexOf(existing[j]) !== -1) running.add(existing[j]);
+      }
+    } catch (_error) {}
+  }
+  return existing.find(function (file) { return running.has(file); }) || existing[0] || candidates[0];
+}
 
 var CLI_USAGE = [
   "grok-switch " + CLI_VERSION + " - route Grok Bot inference to your own model API",
@@ -312,8 +337,11 @@ function cliReadBundle() {
 // Returns "unchanged" | "patched" | "updated".
 function cliEnsurePatched() {
   var text = cliReadBundle();
+  var adapter = cliHostAdapterMarkers(text);
+  if (adapter.markerPresent && !adapter.markerComplete) throw new CliError("host bundle contains incomplete or duplicate experimental host-066 adapter markers; no files were changed. Recover the adapter using experimental/host-066 transform.remove before updating grok-switch.");
   var info = cliInspectBundle(text);
   if (info.patched && info.version === CLI_VERSION) return "unchanged";
+  if (adapter.markerPresent) throw new CliError("experimental host-066 adapter is installed; no files were changed. Remove the adapter using experimental/host-066 transform.remove before updating the inference patch.");
   cliAssertPatchable(info.stock);
   if (!info.patched) cliFs.writeFileSync(CLI_BACKUP_PATH, info.stock, { mode: 384 });
   cliWriteBundle(cliBuildPatched(info.stock));
@@ -322,6 +350,7 @@ function cliEnsurePatched() {
 
 function cliUnpatch() {
   var text = cliReadBundle();
+  if (cliHostAdapterMarkers(text).markerPresent) throw new CliError("experimental host-066 adapter depends on the inference patch; no files were changed. Remove the adapter using experimental/host-066 transform.remove before running restore.");
   var info = cliInspectBundle(text);
   if (!info.patched) return false;
   cliWriteBundle(info.stock);
@@ -403,6 +432,140 @@ function cliRequestRestart(reason) {
   return { issued: true, command: command };
 }
 
+// Only routing metadata is read. Never return agent IDs, names, profile text,
+// credentials, or transcripts in the panel's diagnostic response.
+function cliAgentProfilesState(proc) {
+  var hostEnv = {};
+  if (proc != null) {
+    try {
+      var fields = cliFs.readFileSync(cliPath.join(CLI_PROC_ROOT, String(proc.pid), "environ"), "utf8").split("\0");
+      for (var i = 0; i < fields.length; i += 1) {
+        var match = /^(SAND_DATA_ROOT|SAND_USER_DATA_DIR)=(.*)$/.exec(fields[i]);
+        if (match) hostEnv[match[1]] = match[2];
+      }
+    } catch (_error) {}
+  }
+  var dataRoot = hostEnv.SAND_DATA_ROOT || process.env.SAND_DATA_ROOT;
+  var userData = hostEnv.SAND_USER_DATA_DIR || process.env.SAND_USER_DATA_DIR;
+  var root = process.env.GROK_SWITCH_AGENTS_ROOT || (dataRoot && cliPath.isAbsolute(dataRoot) ? cliPath.join(dataRoot, "agents") : userData && cliPath.isAbsolute(userData) ? cliPath.join(userData, "sand-data", "agents") : "/home/box/sand-data/agents");
+  var out = { root: root, readable: false, total: 0, temporal: 0, box: 0, unknown: 0, invalid: 0, truncated: false };
+  var entries;
+  try { entries = cliFs.readdirSync(root, { withFileTypes: true }); } catch (_error) { return out; }
+  out.readable = true;
+  entries = entries.filter(function (entry) { return entry.isDirectory(); });
+  out.truncated = entries.length > 1000;
+  for (var j = 0; j < Math.min(entries.length, 1000); j += 1) {
+    var profilePath = cliPath.join(root, entries[j].name, "profile.json");
+    try {
+      // A profile is small metadata. A surprising file must not make status
+      // read an unbounded amount of private data or follow a profile symlink.
+      var stat = cliFs.lstatSync(profilePath);
+      if (!stat.isFile() || stat.size > 1024 * 1024) { out.invalid += 1; continue; }
+      var profile = JSON.parse(cliFs.readFileSync(profilePath, "utf8"));
+      if (profile == null || typeof profile !== "object" || Array.isArray(profile)) { out.invalid += 1; continue; }
+      out.total += 1;
+      if (profile.harness === "temporal") out.temporal += 1;
+      else if (profile.harness === "box" || profile.harness == null) out.box += 1;
+      else out.unknown += 1;
+    } catch (error) {
+      if (error.code !== "ENOENT") out.invalid += 1;
+    }
+  }
+  return out;
+}
+
+// The experimental host adapter is deliberately narrower than a provider
+// switch: it admits only explicitly created, local-only test agents. This is a
+// configuration check, never proof that a turn or tool completed successfully.
+function cliHostAdapterMarkers(source) {
+  var begin = source.match(/^\/\/ GROK_SWITCH_HOST_066_BEGIN[^\r\n]*$/gm) || [];
+  var end = source.match(/^\/\/ GROK_SWITCH_HOST_066_END[^\r\n]*$/gm) || [];
+  return {
+    markerPresent: source.indexOf("GROK_SWITCH_HOST_066_BEGIN") !== -1 || source.indexOf("GROK_SWITCH_HOST_066_END") !== -1,
+    markerComplete: begin.length === 1 && end.length === 1 && source.indexOf(begin[0]) < source.indexOf(end[0])
+  };
+}
+
+function cliScopedAdapterState(source, profiles, hostVersion) {
+  var markers = cliHostAdapterMarkers(source);
+  var out = {
+    markerPresent: markers.markerPresent,
+    markerComplete: markers.markerComplete,
+    manifestValid: false, configuredAgents: 0, eligibleAgents: 0, ineligibleAgents: 0
+  };
+  if (!out.markerComplete || hostVersion !== "1494ebd") return out;
+  var manifest;
+  try {
+    var manifestPath = cliPath.join(CLI_CONFIG_DIR, "local-agents.json");
+    var manifestStat = cliFs.lstatSync(manifestPath);
+    if (!manifestStat.isFile() || manifestStat.size > 64 * 1024) return out;
+    manifest = JSON.parse(cliFs.readFileSync(manifestPath, "utf8"));
+  } catch (_error) { return out; }
+  var uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (manifest == null || typeof manifest !== "object" || Array.isArray(manifest) || manifest.version !== 1 || manifest.hostVersion !== "1494ebd" || !Array.isArray(manifest.agentIds) || manifest.agentIds.length > 16 || manifest.agentIds.some(function (id) { return typeof id !== "string" || !uuidV4.test(id); }) || new Set(manifest.agentIds).size !== manifest.agentIds.length) return out;
+  out.manifestValid = true;
+  out.configuredAgents = manifest.agentIds.length;
+  for (var i = 0; i < manifest.agentIds.length; i += 1) {
+    var eligible = false;
+    try {
+      var profilePath = cliPath.join(profiles.root, manifest.agentIds[i], "profile.json");
+      var stat = cliFs.lstatSync(profilePath);
+      if (stat.isFile() && stat.size <= 1024 * 1024) {
+        var profile = JSON.parse(cliFs.readFileSync(profilePath, "utf8"));
+        eligible = profile != null && profile.harness === "box" && profile.serverId == null && profile.grokSwitchLocal != null && profile.grokSwitchLocal.version === 1 && profile.grokSwitchLocal.hostVersion === "1494ebd";
+      }
+    } catch (_error) {}
+    if (eligible) out.eligibleAgents += 1;
+    else out.ineligibleAgents += 1;
+  }
+  return out;
+}
+
+// A successful disk patch is not an end-to-end routing certificate. In recent
+// hosts the inference factory still exists although the Box send path is
+// retired, and Temporal conversations never enter that inference factory.
+function cliExecutionCompatibility(stock, proc, hostVersion) {
+  var profiles = cliAgentProfilesState(proc);
+  var source = stock || "";
+  var evidence = [];
+  var retiredSend = /this\.tm\.boxHarnessTurnGate\.reportBlocked\([\s\S]{0,600}?\);\s*throw new SandBoxHarnessRetiredError\(\);\s*\}/.test(source);
+  var retiredGate = /(?:const|let|var) boxHarnessTurnGate\s*=\s*\{\s*isBlocked:\s*\(\)\s*=>\s*true\s*,/.test(source);
+  var factory = source.indexOf(CLI_HOST_FACTORY) !== -1;
+  var adapter = cliScopedAdapterState(source, profiles, hostVersion);
+  if (retiredSend) evidence.push("box-send-unconditionally-retired");
+  if (retiredGate) evidence.push("box-run-gate-always-blocked");
+  if (profiles.temporal > 0) evidence.push("temporal-agent-profiles");
+  var reason;
+  var status = "unverified";
+  var message;
+  if (stock == null) {
+    reason = "host-missing";
+    message = "Host bundle is unavailable; chat routing cannot be verified.";
+  } else if (adapter.markerComplete && adapter.manifestValid && adapter.eligibleAgents > 0) {
+    reason = "scoped-local-adapter";
+    evidence.push("explicit-local-agent-scope");
+    message = "An experimental local adapter is configured only for eligible allowlisted test Bots. Existing Temporal chats are unchanged; verify a real chat and tool round trip before claiming success.";
+  } else if (retiredSend || retiredGate) {
+    reason = "box-turn-retired";
+    status = "blocked";
+    message = "This host retires local Box turns. An inference patch and successful provider tests do not connect Temporal chats to the selected provider.";
+  } else if (profiles.temporal > 0 && profiles.box === 0 && profiles.unknown === 0 && profiles.invalid === 0 && !profiles.truncated) {
+    reason = "temporal-routing";
+    status = "blocked";
+    message = "All observed agent profiles use Temporal. These chats bypass the Box inference patch; provider tests do not verify chat routing.";
+  } else if (profiles.temporal > 0) {
+    reason = "mixed-routing";
+    message = "Temporal agents bypass the Box inference patch. Verify the execution route of the particular chat before claiming it uses this provider.";
+  } else if (!factory) {
+    reason = "unknown-host";
+    message = "The expected Box inference factory was not found; this host is not verified compatible.";
+  } else {
+    reason = "box-route-unverified";
+    message = "The Box inference entry point exists. Verify a real chat request; a disk patch, process timestamp or provider test alone is not runtime proof.";
+  }
+  return { status: status, reason: reason, boxTurnRetired: retiredSend || retiredGate, inferenceFactoryPresent: factory, runtimeVerified: false, profiles: profiles, adapter: adapter, message: message, evidence: evidence };
+}
+
 function cliHostState() {
   var text = null;
   try {
@@ -431,7 +594,8 @@ function cliHostState() {
     backupExists: cliFs.existsSync(CLI_BACKUP_PATH),
     process: proc,
     runningCurrentBundle: runningCurrent,
-    supervisor: cliSupervisorState()
+    supervisor: cliSupervisorState(),
+    executionCompatibility: cliExecutionCompatibility(info == null ? null : info.stock, proc, version)
   };
 }
 
@@ -553,12 +717,13 @@ async function cliCommandUse(args) {
   var state = cliHostState();
   if (outcome !== "unchanged" || state.runningCurrentBundle === false) {
     cliExplainRestart(cliRequestRestart("grok-switch use " + name));
-    cliPrint("after the restart, new conversations use " + name + ".");
+    if (state.executionCompatibility.status !== "blocked") cliPrint("after the restart, compatible Box conversations use " + name + ".");
   } else if (state.process == null) {
     cliPrint("host process not found; it will use " + name + " when it starts.");
-  } else {
+  } else if (state.executionCompatibility.status !== "blocked") {
     cliPrint("takes effect on the next conversation turn; no restart needed.");
   }
+  if (state.executionCompatibility.status === "blocked" || state.executionCompatibility.reason === "mixed-routing") cliPrint("warning     : " + state.executionCompatibility.message);
   cliPrint("in chat: /gs official switches back, /gs use <name> switches again, /gs status shows the route.");
 }
 
@@ -578,6 +743,7 @@ async function cliCommandInstall(args) {
     cliPrint("host process already runs the patched code; no restart needed.");
   }
   cliPrint("route: " + (grokSwitchResolveRoute().kind === "official" ? "official Grok (unchanged until a provider is selected)" : "external provider selected"));
+  if (state.executionCompatibility.status === "blocked" || state.executionCompatibility.reason === "mixed-routing") cliPrint("warning     : " + state.executionCompatibility.message);
   if (!args.flags["no-ui"]) {
     await uiCommand({ positional: ["ui"], flags: { background: true, port: args.flags.port } });
   }
@@ -597,12 +763,15 @@ function cliCommandRestart() {
 
 function cliCommandRestore() {
   var config = cliReadRawConfig();
+  // Unpatch may refuse an experimental adapter. Check it before resetting the
+  // active provider so a refused restore is completely non-mutating.
+  var unpatched = cliUnpatch();
   if (config.active != null) {
     config.active = null;
     cliWriteConfig(config);
     cliPrint("active provider reset to official Grok");
   }
-  if (cliUnpatch()) {
+  if (unpatched) {
     cliPrint("patch removed from " + CLI_HOST_PATH);
     cliExplainRestart(cliRequestRestart("grok-switch restore"));
   } else {
@@ -654,6 +823,7 @@ function cliCommandStatus(args) {
     cliPrint(JSON.stringify({
       version: CLI_VERSION,
       host: host,
+      executionCompatibility: host.executionCompatibility,
       config: { path: CLI_CONFIG_PATH, active: config.active, providers: Object.keys(config.providers), route: route.kind, error: route.kind === "error" ? route.message : null, activeProvider: activeProvider },
       usage: usage,
       recentRequests: recent
@@ -675,6 +845,8 @@ function cliCommandStatus(args) {
   }
   var sup = host.supervisor;
   cliPrint("supervisor  : " + (sup.busy ? "agent busy" : "idle") + (sup.pending ? ", command pending (" + String(sup.pending.id) + ")" : ""));
+  cliPrint("chat route  : " + host.executionCompatibility.reason + " (" + host.executionCompatibility.status + ")");
+  cliPrint("routing note: " + host.executionCompatibility.message);
   if (route.kind === "official") cliPrint("active      : official Grok");
   else if (route.kind === "external") cliPrint("active      : " + route.provider.name + " -> " + cliDescribeProvider(route.provider));
   else cliPrint("active      : MISCONFIGURED - " + route.message + " (requests fail until fixed; run `official` to recover)");

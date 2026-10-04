@@ -34,14 +34,14 @@ export function ProviderActions({
         className="w-fit px-2.5"
       >
         {active ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        {switching ? "切换中" : active ? "使用中" : "使用"}
+        {switching ? "保存中" : active ? "已选择" : "选择"}
       </Button>
       {!official && (
         <div className="flex items-center gap-1">
           <Button size="icon" variant="ghost" disabled={busy} onClick={onEdit} aria-label="编辑" title="编辑" className={iconButtonClass}>
             <Edit className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" disabled={busy} onClick={onTest} aria-label="测试" title="发一条测试请求" className={iconButtonClass}>
+          <Button size="icon" variant="ghost" disabled={busy} onClick={onTest} aria-label="接口测试" title="直接测试接口，不验证 Grok Bot 聊天路由" className={iconButtonClass}>
             <Activity className="h-4 w-4" />
           </Button>
           <Button size="icon" variant="ghost" disabled={busy} onClick={onDuplicate} aria-label="复制" title="复制为新来源（保留 key，改模型即可）" className={iconButtonClass}>
@@ -53,7 +53,7 @@ export function ProviderActions({
             disabled={busy || active}
             onClick={onDelete}
             aria-label="删除"
-            title={active ? "使用中的来源不能删除" : "删除"}
+            title={active ? "当前选择的来源不能删除" : "删除"}
             className={iconButtonClass + " hover:text-red-500"}
           >
             <Trash2 className="h-4 w-4" />

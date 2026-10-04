@@ -150,11 +150,11 @@ export function ProviderForm({
           </Button>
           <Button variant="outline" disabled={busy} onClick={() => void submit(null, false)}>
             <Save className="h-4 w-4" />
-            {pending === "save" ? "测试中…" : "测试并保存"}
+            {pending === "save" ? "接口测试中…" : "测试接口并保存"}
           </Button>
           <Button disabled={busy} onClick={() => void submit(null, true)}>
             <Play className="h-4 w-4" />
-            {pending === "use" ? "测试中…" : "测试、保存并使用"}
+            {pending === "use" ? "接口测试中…" : "测试、保存并选择"}
           </Button>
         </>
       }

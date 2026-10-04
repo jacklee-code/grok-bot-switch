@@ -1,6 +1,6 @@
 {
   "name": "grok-bot-switch",
-  "version": "0.8.5",
+  "version": "0.9.0-alpha.1",
   "private": true,
   "description": "Route Grok Bot cloud inference to your own OpenAI/Anthropic-compatible API with a single file.",
   "license": "MIT",
@@ -10,6 +10,7 @@
   "scripts": {
     "build": "node build.mjs",
     "build:minitool": "cd minitool && rm -f ../dist/grok-switch-minitool.zip && zip -q -r -X ../dist/grok-switch-minitool.zip . -x '*.DS_Store'",
-    "test": "node build.mjs && node --test --test-reporter=spec tests/*.test.mjs"
+    "test": "node build.mjs && node --test --test-reporter=spec tests/*.test.mjs",
+    "test:compat": "node --test experimental/host-066/*.test.cjs experimental/client-066/*.test.cjs && node scripts/python-tests.cjs"
   }
 }

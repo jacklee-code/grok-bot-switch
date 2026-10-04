@@ -54,6 +54,7 @@ function makeEnv() {
       GROK_SWITCH_HOST: host,
       GROK_SWITCH_SUPERVISOR_DIR: path.join(dir, "sup"),
       GROK_SWITCH_PROC: proc,
+      GROK_SWITCH_AGENTS_ROOT: path.join(dir, "isolated-agent-profiles"),
       GROK_SWITCH_DIR: path.join(dir, "cfg")
     }
   };
@@ -134,7 +135,11 @@ test("use patches the host, requests a restart, and status/list/official/restore
   const config = JSON.parse(fs.readFileSync(path.join(dir, "cfg", "config.json"), "utf8"));
   assert.equal(config.active, "beef");
   assert.equal(config.providers.beef.apiKey, "sk-1");
-  assert.equal(fs.statSync(path.join(dir, "cfg", "config.json")).mode & 0o777, 0o600);
+  // Windows does not implement POSIX chmod bits. Linux CI still verifies the
+  // credential file is private on the platform that runs the real host.
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(path.join(dir, "cfg", "config.json")).mode & 0o777, 0o600);
+  }
 
   // The patched fake bundle must still load and expose the wrapped factory.
   const loaded = spawnSync(process.execPath, ["-e", `
@@ -145,7 +150,7 @@ test("use patches the host, requests a restart, and status/list/official/restore
   assert.equal(loaded.stdout, "function undefined", loaded.stderr);
 
   r = run(env, "status");
-  assert.match(r.out, /patched \(0\.\d+\.\d+\)/);
+  assert.ok(r.out.includes("patched (" + PKG_VERSION + ")"), r.out);
   assert.match(r.out, /RESTART PENDING/);
   assert.match(r.out, /command pending \(grok-switch-\d+\)/);
   assert.match(r.out, /active {6}: beef -> openai-chat https:\/\/api\.example\.com\/v1\/chat\/completions model=gpt-5/);
