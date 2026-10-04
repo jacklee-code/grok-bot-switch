@@ -6,6 +6,15 @@ on:
 permissions:
   contents: read
 jobs:
+  desktop-patcher:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -X utf8 -m unittest discover -s desktop-patcher/tests -v
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15

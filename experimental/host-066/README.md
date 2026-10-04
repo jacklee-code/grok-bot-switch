@@ -2,7 +2,9 @@
 
 This opt-in adapter restores a manual send entry for **new, explicitly allowlisted local Bots** using the existing host runner, transcript database, turn lifecycle, and tool permission handling. It does not migrate existing Temporal conversations or enable their schedules.
 
-Use it together with the Windows 0.66.0 client adapter. Neither side alone establishes a desktop chat path. The API provider must already be configured in Grok Switch; the adapter refuses ordinary turns while the external provider is inactive. Control commands are handled from the original gateway input before the host adds its prompt wrappers, without starting a model runner.
+Prefer the **unmodified Windows 0.66.0 client**. On 2026-10-05, this cloud adapter completed real `/gs status` and ordinary text-message exchanges with the original desktop binaries and no desktop routing manifest. This supersedes the earlier claim that both desktop and cloud adapters are always required. See [the cloud-only route](../../docs/cloud-only-066.md) for the evidence and feature-gate limits. The [desktop patch/restore tool](../../desktop-patcher/README.md) is an optional fallback for a separately diagnosed client-routing problem.
+
+The API provider must already be configured in Grok Switch; the adapter refuses ordinary turns while the external provider is inactive. Control commands are handled from the original gateway input before the host adds its prompt wrappers, without starting a model runner.
 
 ## Stage a candidate
 
@@ -27,7 +29,7 @@ Write `<GROK_SWITCH_DIR>/local-agents.json`, normally `/workspace/grok-switch/lo
 {"version":1,"hostVersion":"1494ebd","agentIds":["11111111-1111-4111-8111-111111111111"]}
 ```
 
-Generate a fresh UUID v4 instead of using the illustrative ID. The host permits at most 16 unique IDs. Use the same explicit ID in the desktop profile's `grok-switch-local-agents.json`, and restart the desktop after setting its manifest.
+Generate a fresh UUID v4 instead of using the illustrative ID. The host permits at most 16 unique IDs. The original desktop needs no `grok-switch-local-agents.json`. Only if the optional desktop patch is being used, put the same explicit IDs in that desktop profile's manifest and restart the desktop after changing it.
 
 To create the isolated Bot, call the authenticated native gateway `createAgent` method with:
 
@@ -47,15 +49,19 @@ Only this reserved manifest ID and Box creation shape use the adapter. It reject
 
 Initial support is manual plain-text main-chat turns. Attachments, reply threads, forks, task chats, workflow/automation imports and runs are refused. Groups, voice, connected services, subagents and cross-device use are not validated. The native runner and its permission/auto-review machinery remain responsible for any tool call.
 
+The original-client live check was repeated after moving only `roster.last-roster` and `selection.last-agent` cache entries aside and restarting; a new visible response contained `GS-COLD-ROSTER-OK-9364`. Authentication and other profile data were retained. This is not a clean-profile, fresh-login or office-computer test. The earlier successful Shell-tool test used the patched desktop; it does not establish a Shell round trip through the original client.
+
 Verify both `/gs status` and a harmless normal message from the actual desktop UI. A provider probe, patched PID, configured allowlist or direct gateway test alone does not establish the full UI path. Check the resulting provider request log and the visible desktop response. Keep original Temporal agent routing unchanged during validation.
+
+The original nine Temporal Bots remain official and are not migrated by this adapter. External main inference does not prove zero official weekly usage or continued service after official account limits; no quota before/after measurement has been completed.
 
 ## Disable and restore
 
-Removing the host manifest stops new local execution while the installed adapter keeps marked local Bots excluded from identity backfill and automation sync. The client reads its manifest once per launch, so stop/restart it when changing its configuration.
+Removing the host manifest stops new local execution while the installed adapter keeps marked local Bots excluded from identity backfill and automation sync. If the optional desktop patch is installed, it reads its separate manifest once per launch, so stop/restart that client when changing its configuration. The original desktop has no such local manifest requirement.
 
 For complete removal, first stop new input and wait for active turns to finish. Stop the host and move **only the newly created local test Bot directory** to a recoverable backup outside the native `agents` directory before removing the adapter. Otherwise native identity backfill may register the leftover local profile with the server.
 
-Stage adapter removal with the same tool and `--operation remove`, restore the desktop using its exact verified backup pair, then restore the ordinary inference patch if desired. Ordinary Switch `restore` and version-changing updates refuse while this adapter is present, preventing a half-uninstalled host.
+Stage adapter removal with the same tool and `--operation remove`. If a desktop patch was installed, restore it using its exact verified backup pair; an original desktop needs no binary restoration. Then restore the ordinary inference patch if desired. Ordinary Switch `restore` and version-changing updates refuse while this adapter is present, preventing a half-uninstalled host.
 
 ## Tests
 
@@ -64,3 +70,5 @@ node --test experimental/host-066/runtime.test.cjs
 ```
 
 Tests cover manifest/profile ownership, native runner wiring, idempotent nonce replay, per-turn lifecycle accounting under concurrent admissions, cancellation, early failures, workflow exclusion and marker preservation. They use synthetic dependencies; separately staging a real bundle validates anchors and syntax without executing that bundle.
+
+The optional Windows tool has separate [development tests and build instructions](../../desktop-patcher/README.md). Run `python -m unittest discover -s desktop-patcher/tests -p 'test_*.py'` from the repository root. Its packaged portable EXE requires separate validation; source tests do not establish a successful packaged build or office-machine deployment.

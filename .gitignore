@@ -7,3 +7,6 @@ panel/node_modules/
 __pycache__/
 *.pyc
 .local/
+desktop-patcher/build/
+desktop-patcher/dist/
+desktop-patcher/resources/node.exe

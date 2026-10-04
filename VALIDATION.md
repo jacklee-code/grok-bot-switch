@@ -61,3 +61,84 @@ Runtime status intentionally reports scoped capability as `unverified`; static
 file/manifest checks cannot certify a current desktop round trip. This dated
 record documents the live verification separately. A vendor upgrade requires
 new shape checks and live validation.
+
+## Follow-up: original desktop and cloud-only route, 2026-10-05
+
+The alpha.1 evidence above is retained as a historical record of the original
+deployment, which used both desktop and cloud patches. The follow-up below
+**supersedes the assumption that a desktop patch is necessary** for the tested
+Windows `0.66.0` / Linux host `1494ebd` combination. It does not invalidate the
+earlier observations or extend them to unrelated Bots and computers.
+
+- Both desktop binaries were restored to their exact pre-patch SHA-256 hashes,
+  and `grok-switch-local-agents.json` was moved out of its active profile
+  location. The cloud adapter remained installed.
+- `/gs status` submitted through the original desktop produced the matching
+  cloud command admission and a visible status reply without increasing the
+  external provider's request count.
+- A fresh ordinary message through that original desktop received a visible
+  verification response, with corresponding external-provider `turn` requests
+  returning HTTP 200.
+- The test was repeated after moving only the cached `roster.last-roster` and
+  `selection.last-agent` entries aside, then restarting the original desktop.
+  The isolated Bot appeared in the refreshed roster and a newly submitted
+  message produced the visible marker **`GS-COLD-ROSTER-OK-9364`**, confirmed in
+  the screenshot and accessibility state. Both associated provider requests
+  returned HTTP 200.
+- Authentication and other profile data were preserved. This cache-refresh
+  test was **not** a clean profile, a new login, another computer, or an office
+  installation. It establishes independence from those two old cache entries
+  for the tested exchange, not independence from all client state.
+- The original nine Temporal Bots retained their official routes. No existing
+  Bot, history, server identity or schedule was migrated. The original-client
+  checks cover the control command and ordinary text; the earlier Shell-tool
+  verification still belongs to the patched-desktop test.
+
+The detailed routing analysis, request evidence, cached feature-gate values,
+and second-computer acceptance steps are in
+[docs/cloud-only-066.md](docs/cloud-only-066.md). Prefer this original-desktop
+route. The optional desktop patch and profile manifest are only needed when
+choosing that fallback for a separately diagnosed client-routing problem.
+
+No before/after official weekly-quota measurement was made. External main
+inference is confirmed for the isolated Bot, but zero official usage, operation
+after quota exhaustion, all feature-gate combinations, and office-machine
+operation are not established.
+
+### Desktop patch/restore fallback: development evidence
+
+The new [desktop tool](desktop-patcher/README.md) supplies a Traditional Chinese
+GUI and CLI for inspection, scoped patching, exact restoration, and importing
+a verified alpha.1 staging snapshot. It includes installation/profile discovery,
+strict Scope parsing, one elevation attempt when needed, preservation of the
+original profile, and managed backup verification.
+
+The Windows development run passed **39 tests** in
+`desktop-patcher/tests`, including transaction/restore refusal cases and
+entry-point checks for elevation retry, restart intent, and profile selection.
+A hidden Tk construction check and temporary-directory CLI inspection check
+also completed without changing the installed application. These are source
+and fixture checks, not a claim about the final portable executable.
+
+The final Windows portable EXE was built with Python 3.12.6, PyInstaller 6.20.0
+and bundled Node.js 24.15.0. Its SHA-256 is
+`4ffe1d7c79cac3dbe1c678c04817dd6a4b2d91d7a9ba14ea21358a2c4cf0236b`.
+Four packaged CLI checks completed successfully against this exact artifact:
+
+- Inspect the actual stock installation: `original`, version `0.66.0`.
+- Dry-run a patch against that installation and profile using a synthetic
+  scope: no application writes, no state directory, no stopped processes.
+- Patch a separate copy of the actual stock EXE/ASAR with an empty fixture
+  profile: `ours` with the exact requested synthetic scope.
+- Restore that fixture: `original`; both original file hashes and the
+  previously absent scope were restored exactly.
+
+The real installation's hashes, sizes, timestamps, scope and running process
+IDs remained unchanged throughout those packaged checks. The final GUI was
+also launched and visually inspected: it discovered the actual installation
+and profile, reported the official original state, and displayed the
+cloud-first guidance and fallback Patch/Restore controls without clipping.
+Actual mutation was tested through the CLI on the isolated copy; no live UAC
+or office-machine operation is claimed. See the
+[build instructions](desktop-patcher/README.md) and
+[`build.ps1`](desktop-patcher/build.ps1).

@@ -4,7 +4,10 @@
 
 `0.9.0-alpha.1` 已在上述版本組合完成真實桌面文字往返、零模型請求的 `/gs status`，以及原生雲端 Shell 測試。這個支援範圍只涵蓋明確設定的獨立新 Bot，不會自動遷移既有 Temporal 身份、歷史或排程。
 
+**2026-10-05 後續驗證：優先保留官方原版客戶端。** 還原 Windows EXE／ASAR 並移除桌面設定後，單靠雲端相容層已完成 `/gs status` 及普通文字往返；移開 Bot 名單和選取快取後重啟亦通過。先前兩端都必須修改的假設已更正。此結果未涵蓋辦公室電腦、所有功能開關組合或既有 Temporal Bot；詳見 [cloud-only 驗證](docs/cloud-only-066.md)。
+
 - [驗收結果與限制](VALIDATION.md)
+- [Windows 一鍵 Patch／Restore 軟件（可選相容性備用）](desktop-patcher/README.md)
 - [Windows 0.66.0 候選產生、校核及還原工具](experimental/client-066/README.md)
 - [Linux host 1494ebd 相容層與獨立 Bot 設定](experimental/host-066/README.md)
 
